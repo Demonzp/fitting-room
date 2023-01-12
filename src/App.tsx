@@ -1,56 +1,81 @@
-import React from 'react';
-import logo from './logo.svg';
-import { Counter } from './features/counter/Counter';
+import { useState, useEffect, useRef } from 'react';
+import { SupportedModels, createDetector, PoseDetector, Keypoint } from '@tensorflow-models/pose-detection';
 import './App.css';
 
+type TStatus = 'anilized' | 'ready' | 'no-img';
+
 function App() {
+  const model = SupportedModels.MoveNet;
+
+  const [detector, setDetector] = useState<PoseDetector | null>(null);
+  const [status, setStatus] = useState<TStatus>('no-img');
+  const canvasEl = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    initDetector();
+  }, []);
+
+  const initDetector = async () => {
+    const d = await createDetector(model);
+    setDetector(d);
+    //setStatus('vse cruto!!!!');
+  };
+
+  const onChangeImg = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const img = new Image();
+      setStatus('anilized');
+      img.onload = async () => {
+        //Scene.addImage(img);
+        await renderImg(img);
+        URL.revokeObjectURL(img.src);
+
+        const poses = await detector!.estimatePoses(img);
+        setStatus('ready');
+        renderDots(poses[0].keypoints);
+        //console.log('poses = ', poses[0].keypoints);
+      };
+
+      img.src = URL.createObjectURL(files[0]);
+
+    }
+  };
+
+  const renderImg = (img: HTMLImageElement): Promise<void> => {
+    return new Promise((resolve, _) => {
+      const canvas = canvasEl.current!;
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+      setTimeout(()=>resolve());
+    });
+  };
+
+  const renderDots = (arrDots: Keypoint[])=>{
+    const canvas = canvasEl.current!;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'red';
+    arrDots.forEach(dot=>{
+      ctx.fillRect(dot.x-2, dot.y-2, 4, 4);
+    });
+    
+  }
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <Counter />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <span>
-          <span>Learn </span>
-          <a
-            className="App-link"
-            href="https://reactjs.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            React
-          </a>
-          <span>, </span>
-          <a
-            className="App-link"
-            href="https://redux.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Redux
-          </a>
-          <span>, </span>
-          <a
-            className="App-link"
-            href="https://redux-toolkit.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Redux Toolkit
-          </a>
-          ,<span> and </span>
-          <a
-            className="App-link"
-            href="https://react-redux.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            React Redux
-          </a>
-        </span>
-      </header>
+      {
+        (detector && status === 'no-img') &&
+        <>
+          <input type='file' accept='image/png, image/jpeg' onChange={onChangeImg} />
+        </>
+      }
+      {
+        status !== 'no-img' && <div>{status}</div>
+      }
+      <canvas ref={canvasEl}></canvas>
     </div>
   );
 }
